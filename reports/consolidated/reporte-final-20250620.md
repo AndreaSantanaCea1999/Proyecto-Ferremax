@@ -1,6 +1,3 @@
-﻿# 📋 Reporte Final - Pruebas Automatizadas FERREMAS
-
-Aquí va el contenido del reporte consolidado...
 # 📋 Reporte Final - Pruebas Automatizadas FERREMAS
 
 **Fecha:** $(date)
