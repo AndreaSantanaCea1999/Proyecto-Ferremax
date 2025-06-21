@@ -1,0 +1,9 @@
+[submodule "api-inventario"]
+	path = api-inventario
+	url = https://github.com/AndreaSantanaCea1999/api-inventario
+[submodule "api-transbank"]
+	path = api-transbank
+	url = https://github.com/AndreaSantanaCea1999/api-transbank
+[submodule "api-ventas-pagos"]
+	path = api-ventas-pagos
+	url = https://github.com/AndreaSantanaCea1999/api-ventas-pagos
