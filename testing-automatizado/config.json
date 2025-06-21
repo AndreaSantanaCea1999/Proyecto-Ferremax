@@ -1,0 +1,22 @@
+{
+  "apis": {
+    "inventario": {
+      "name": "API Inventario",
+      "baseUrl": "http://localhost:3000/api",
+      "healthCheck": "/productos",
+      "directory": "../api-inventario"
+    },
+    "ventas": {
+      "name": "API Ventas y Pagos",
+      "baseUrl": "http://localhost:3001/api",
+      "healthCheck": "/pedidos",
+      "directory": "../api-ventas-pagos"
+    },
+    "transbank": {
+      "name": "API Transbank",
+      "baseUrl": "http://localhost:3003/api",
+      "healthCheck": "/transbank",
+      "directory": "../api-transbank"
+    }
+  }
+}

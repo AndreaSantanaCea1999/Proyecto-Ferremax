@@ -1,0 +1,81 @@
+{
+  "info": {
+    "name": "Ferremax Multi API Collection",
+    "_postman_id": "ferremax-multi-api",
+    "description": "Colección de pruebas para las 3 APIs de Ferremax",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Check API Inventario Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{inventario_baseUrl}}{{inventario_healthCheck}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Check API Ventas Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{ventas_baseUrl}}{{ventas_healthCheck}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Check API Transbank Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{transbank_baseUrl}}{{transbank_healthCheck}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "inventario_baseUrl", "value": "http://localhost:3000/api" },
+    { "key": "inventario_healthCheck", "value": "/productos" },
+    { "key": "ventas_baseUrl", "value": "http://localhost:3001/api" },
+    { "key": "ventas_healthCheck", "value": "/pedidos" },
+    { "key": "transbank_baseUrl", "value": "http://localhost:3003" },
+    { "key": "transbank_healthCheck", "value": "/health" }
+  ]
+}
