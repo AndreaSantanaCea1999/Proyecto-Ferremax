@@ -1,6 +1,3 @@
-﻿# 📋 Reporte Final - Pruebas Automatizadas FERREMAS
-
-Aquí va el contenido del reporte consolidado...
 # 📋 Reporte Final - Pruebas Automatizadas FERREMAS
 
 **Fecha:** $(date)
@@ -34,7 +31,7 @@ Aquí va el contenido del reporte consolidado...
 ## 📁 ARCHIVOS ENTREGABLES
 
 ### Reportes HTML
-- reports/newman/multi-api-report-20250620_190642.html (PRINCIPAL)
+- reports/newman/multi-api-report-20250620_190642.html (Reporte exitoso)
 - reports/newman/multi-api-report-20250620_184347.html
 - reports/newman/multi-api-report-20250620_184002.html
 - reports/newman/multi-api-report-20250620_183238.html
