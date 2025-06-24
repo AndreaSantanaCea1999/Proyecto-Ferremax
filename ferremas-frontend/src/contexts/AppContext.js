@@ -27,12 +27,15 @@ const actionTypes = {
   SET_CURRENT_PAGE: 'SET_CURRENT_PAGE',
   TOGGLE_LOGIN: 'TOGGLE_LOGIN',
   TOGGLE_CART: 'TOGGLE_CART',
+  SET_SHOW_CART: 'SET_SHOW_CART',
   SET_CATEGORY: 'SET_CATEGORY',
   SET_SEARCH: 'SET_SEARCH'
 };
 
 // Reducer
 const appReducer = (state, action) => {
+  console.log('🔄 Action dispatched:', action.type, action.payload);
+  
   switch (action.type) {
     case actionTypes.SET_USER:
       return {
@@ -108,6 +111,7 @@ const appReducer = (state, action) => {
       };
     
     case actionTypes.SET_CURRENT_PAGE:
+      console.log('📄 Cambiando página a:', action.payload);
       return {
         ...state,
         currentPage: action.payload
@@ -125,6 +129,12 @@ const appReducer = (state, action) => {
         showCart: !state.showCart
       };
     
+    case actionTypes.SET_SHOW_CART:
+      return {
+        ...state,
+        showCart: action.payload
+      };
+    
     case actionTypes.SET_CATEGORY:
       return {
         ...state,
@@ -138,6 +148,7 @@ const appReducer = (state, action) => {
       };
     
     default:
+      console.warn('⚠️ Action type no reconocido:', action.type);
       return state;
   }
 };
@@ -165,6 +176,7 @@ export const AppProvider = ({ children }) => {
     setCurrentPage: (page) => dispatch({ type: actionTypes.SET_CURRENT_PAGE, payload: page }),
     toggleLogin: () => dispatch({ type: actionTypes.TOGGLE_LOGIN }),
     toggleCart: () => dispatch({ type: actionTypes.TOGGLE_CART }),
+    setShowCart: (show) => dispatch({ type: actionTypes.SET_SHOW_CART, payload: show }),
     setCategory: (category) => dispatch({ type: actionTypes.SET_CATEGORY, payload: category }),
     setSearch: (term) => dispatch({ type: actionTypes.SET_SEARCH, payload: term })
   };

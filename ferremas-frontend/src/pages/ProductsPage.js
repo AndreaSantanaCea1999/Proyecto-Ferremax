@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import ProductCard from '../components/ProductCard';
-import { inventarioService, mockData } from '../services/api';
+import { productService, mockData } from '../services/api';
 
 const ProductsPage = () => {
   const { state, actions } = useApp();
@@ -9,13 +9,13 @@ const ProductsPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // Cargar productos desde API Inventario
+  // Cargar productos desde API
   useEffect(() => {
     const loadProducts = async () => {
       setLoading(true);
       try {
-        console.log('🔄 Cargando productos desde API Inventario...');
-        const result = await inventarioService.getProducts();
+        console.log('🔄 Cargando productos desde API...');
+        const result = await productService.getProducts();
         
         if (result.success && result.data.length > 0) {
           console.log('✅ Productos cargados desde API:', result.data.length);
@@ -33,7 +33,7 @@ const ProductsPage = () => {
       }
     };
 
-    // Solo cargar si no hay productos o hay pocos productos
+    // Solo cargar si no hay productos
     if (state.products.length === 0) {
       loadProducts();
     }
@@ -52,8 +52,8 @@ const ProductsPage = () => {
     { id: 'all', name: 'Todos los Productos' },
     { id: 'herramientas-manuales', name: 'Herramientas Manuales' },
     { id: 'herramientas-electricas', name: 'Herramientas Eléctricas' },
-    { id: 'materiales-basicos', name: 'Materiales Básicos' },
-    { id: 'acabados', name: 'Pinturas y Acabados' },
+    { id: 'materiales-construccion', name: 'Materiales de Construcción' },
+    { id: 'pinturas', name: 'Pinturas y Acabados' },
     { id: 'seguridad', name: 'Equipos de Seguridad' }
   ];
 
@@ -76,28 +76,28 @@ const ProductsPage = () => {
           {/* Búsqueda */}
           <div>
             <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-2">
-              Buscar productos
+              🔍 Buscar productos
             </label>
             <input
-              type="text"
               id="search"
+              type="text"
               placeholder="Buscar por nombre o marca..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
           {/* Categorías */}
           <div>
             <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
-              Categoría
+              📂 Categoría
             </label>
             <select
               id="category"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               {categories.map(category => (
                 <option key={category.id} value={category.id}>
@@ -108,33 +108,23 @@ const ProductsPage = () => {
           </div>
         </div>
 
-        {/* Información de resultados */}
-        <div className="mt-4 flex justify-between items-center text-sm text-gray-600">
-          <span>
-            {loading ? 'Cargando productos...' : `${filteredProducts.length} productos encontrados`}
-          </span>
-          
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="text-blue-600 hover:text-blue-800"
-            >
-              Limpiar búsqueda
-            </button>
+        {/* Resultados */}
+        <div className="mt-4 text-sm text-gray-600">
+          {loading ? (
+            'Cargando productos...'
+          ) : (
+            `Mostrando ${filteredProducts.length} de ${state.products.length} productos`
           )}
         </div>
       </div>
 
-      {/* Loading state */}
-      {loading && (
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-900"></div>
-          <p className="mt-4 text-gray-600">Cargando productos desde la API...</p>
+      {/* Productos */}
+      {loading ? (
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-900"></div>
+          <span className="ml-4 text-gray-600">Cargando productos...</span>
         </div>
-      )}
-
-      {/* Grid de productos */}
-      {!loading && (
+      ) : (
         <>
           {filteredProducts.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -142,7 +132,7 @@ const ProductsPage = () => {
                 <ProductCard 
                   key={product.id} 
                   product={product}
-                  showAddToCart={true}
+                  featured={product.featured}
                 />
               ))}
             </div>
@@ -188,9 +178,49 @@ const ProductsPage = () => {
             >
               📞 Contactar Especialista
             </button>
-            <button className="border-2 border-blue-900 text-blue-900 px-6 py-3 rounded-lg hover:bg-blue-900 hover:text-white transition-colors">
+            <button 
+              onClick={() => actions.setCurrentPage('contact')}
+              className="border-2 border-blue-900 text-blue-900 px-6 py-3 rounded-lg hover:bg-blue-900 hover:text-white transition-colors"
+            >
               📧 Solicitar Cotización
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Marcas y garantías */}
+      <div className="mt-12 bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-2xl font-bold text-center text-gray-900 mb-6">
+          Trabajamos con las Mejores Marcas
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-center">
+          {['Bosch', 'Stanley', 'DeWalt', 'Makita', 'Black & Decker', 'Truper'].map((brand, index) => (
+            <div key={index} className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+              <div className="text-2xl mb-2">🏷️</div>
+              <p className="font-semibold text-gray-700">{brand}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Beneficios */}
+      <div className="mt-12 bg-gradient-to-r from-blue-900 to-blue-700 rounded-lg text-white p-8">
+        <h2 className="text-2xl font-bold text-center mb-6">¿Por qué elegir FERREMAS?</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="text-center">
+            <div className="text-4xl mb-3">🚚</div>
+            <h3 className="font-bold mb-2">Entrega Rápida</h3>
+            <p className="text-blue-100">Despacho a todo Chile en 24-48 horas</p>
+          </div>
+          <div className="text-center">
+            <div className="text-4xl mb-3">🛡️</div>
+            <h3 className="font-bold mb-2">Garantía Total</h3>
+            <p className="text-blue-100">Garantía en todos nuestros productos</p>
+          </div>
+          <div className="text-center">
+            <div className="text-4xl mb-3">👥</div>
+            <h3 className="font-bold mb-2">Atención Especializada</h3>
+            <p className="text-blue-100">Asesores técnicos especializados</p>
           </div>
         </div>
       </div>
