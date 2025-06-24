@@ -1,0 +1,617 @@
+// ==================== SERVICIO API LIMPIO - FERREMAS ====================
+// Archivo: src/services/api.js (REEMPLAZAR COMPLETAMENTE)
+
+import axios from 'axios';
+
+// ==================== CONFIGURACIÓN ESPECÍFICA PARA TU API ====================
+const API_CONFIG = {
+  inventario: process.env.REACT_APP_API_INVENTARIO || 'http://localhost:3000/api',
+  ventas: process.env.REACT_APP_API_VENTAS || 'http://localhost:3001/api',
+  transbank: process.env.REACT_APP_API_TRANSBANK || 'http://localhost:3003/api', // PUERTO 3003
+  banco: 'https://mindicador.cl/api',
+  timeout: 15000
+};
+
+console.log('🔧 APIs configuradas para TU backend:', API_CONFIG);
+
+// ==================== CLIENTE HTTP ====================
+const createClient = (baseURL, name) => {
+  const client = axios.create({
+    baseURL,
+    timeout: API_CONFIG.timeout,
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  client.interceptors.request.use(config => {
+    console.log(`📤 ${name}:`, config.method?.toUpperCase(), `${config.baseURL}${config.url}`);
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  });
+
+  client.interceptors.response.use(
+    response => {
+      console.log(`✅ ${name} OK:`, response.status);
+      return response;
+    },
+    error => {
+      console.error(`❌ ${name} Error:`, {
+        status: error.response?.status,
+        data: error.response?.data,
+        url: error.config?.url
+      });
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.reload();
+      }
+      return Promise.reject(error);
+    }
+  );
+
+  return client;
+};
+
+// Clientes HTTP para cada API
+const apiInventario = createClient(API_CONFIG.inventario, 'Inventario');
+const apiVentas = createClient(API_CONFIG.ventas, 'Ventas');
+const apiTransbank = createClient(API_CONFIG.transbank, 'Transbank');
+const apiBanco = createClient(API_CONFIG.banco, 'Banco Central');
+
+// ==================== WEBPAY SERVICE ====================
+const webpayService = {
+  async createTransaction(transactionData) {
+    try {
+      console.log('💳 Creando transacción WebPay...', transactionData);
+      
+      if (!transactionData.amount || transactionData.amount <= 0) {
+        throw new Error('Monto inválido para la transacción');
+      }
+
+      const requestData = {
+        amount: Math.round(transactionData.amount),
+        buyOrder: transactionData.buyOrder || `ORD-${Date.now()}`,
+        sessionId: transactionData.sessionId || `SES-${Date.now()}`,
+        returnUrl: transactionData.returnUrl || `${window.location.origin}/pago-resultado`
+      };
+
+      console.log('📤 Enviando a TU API Transbank:', requestData);
+
+      // Probar endpoints específicos para TU API
+      let response;
+      const endpoints = ['/transbank', '/webpay', '/', '/create'];
+      let lastError;
+      let usedEndpoint = '';
+      
+      for (const endpoint of endpoints) {
+        try {
+          console.log(`🔄 Probando TU endpoint: ${API_CONFIG.transbank}${endpoint}`);
+          response = await apiTransbank.post(endpoint, requestData);
+          usedEndpoint = endpoint;
+          console.log(`✅ TU endpoint ${endpoint} funcionó!`);
+          break;
+        } catch (err) {
+          console.log(`❌ TU endpoint ${endpoint} falló:`, err.response?.status);
+          lastError = err;
+        }
+      }
+
+      if (!response) {
+        throw lastError || new Error('Todos los endpoints de tu API Transbank fallaron');
+      }
+
+      // Manejar respuesta de TU API
+      let data = response.data;
+      if (data.data) data = data.data;
+
+      console.log('✅ Transacción creada en TU API:', data, 'usando:', usedEndpoint);
+      
+      return {
+        success: true,
+        data: data,
+        usedEndpoint: usedEndpoint
+      };
+
+    } catch (error) {
+      console.error('❌ Error creando transacción:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message
+      };
+    }
+  },
+
+  async confirmTransaction(token) {
+    try {
+      console.log('🔍 Confirmando transacción:', token);
+      
+      let response;
+      const endpoints = [
+        `/transbank/${token}`,
+        `/webpay/${token}`,
+        `/transbank/confirm/${token}`,
+        `/webpay/confirm/${token}`,
+        `/${token}`,
+        `/confirm/${token}`
+      ];
+      
+      let lastError;
+      for (const endpoint of endpoints) {
+        try {
+          response = await apiTransbank.put(endpoint);
+          console.log(`✅ Confirmación ${endpoint} funcionó!`);
+          break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      if (!response) {
+        throw lastError || new Error('No se pudo confirmar la transacción');
+      }
+
+      let data = response.data;
+      if (data.data) data = data.data;
+
+      return {
+        success: true,
+        data: data
+      };
+
+    } catch (error) {
+      console.error('❌ Error confirmando transacción:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message
+      };
+    }
+  }
+};
+
+// ==================== INVENTARIO SERVICE ====================
+const inventarioService = {
+  async getProducts() {
+    try {
+      const response = await apiInventario.get('/productos');
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.warn('⚠️ API Inventario falló, usando datos mock');
+      return {
+        success: true,
+        data: this.getMockProducts()
+      };
+    }
+  },
+
+  async updateStock(productId, quantity) {
+    try {
+      console.log(`📦 Actualizando stock: Producto ${productId}, Cantidad ${quantity}`);
+      const response = await apiInventario.put(`/productos/${productId}/stock`, { quantity });
+      console.log('✅ Stock actualizado:', response.data);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('❌ Error actualizando stock:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message
+      };
+    }
+  },
+
+  async checkStock(productId, quantity) {
+    try {
+      const response = await apiInventario.get(`/productos/${productId}`);
+      const available = response.data.stock >= quantity;
+      return {
+        success: true,
+        available,
+        currentStock: response.data.stock
+      };
+    } catch (error) {
+      return { success: false, available: true };
+    }
+  },
+
+  getMockProducts() {
+    return [
+      {
+        id: 1,
+        name: 'Taladro Percutor Bosch GSB 550',
+        brand: 'Bosch',
+        price: 89990,
+        stock: 15,
+        category: 'herramientas-electricas',
+        image: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=400',
+        description: 'Taladro percutor profesional ideal para trabajos pesados.'
+      },
+      {
+        id: 2,
+        name: 'Martillo Carpintero Stanley 16oz',
+        brand: 'Stanley',
+        price: 12990,
+        stock: 25,
+        category: 'herramientas-manuales',
+        image: 'https://images.unsplash.com/photo-1585128792020-43c98e8e85f0?w=400',
+        description: 'Martillo de carpintero con mango de madera antideslizante.'
+      },
+      {
+        id: 3,
+        name: 'Sierra Circular DeWalt DWE575',
+        brand: 'DeWalt',
+        price: 156990,
+        stock: 8,
+        category: 'herramientas-electricas',
+        image: 'https://images.unsplash.com/photo-1585128792020-43c98e8e85f0?w=400',
+        description: 'Sierra circular profesional con motor de alta potencia.'
+      },
+      {
+        id: 4,
+        name: 'Cemento Portland Polpaico 25kg',
+        brand: 'Polpaico',
+        price: 4990,
+        stock: 50,
+        category: 'materiales-construccion',
+        image: 'https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=400',
+        description: 'Cemento Portland de alta calidad para construcción.'
+      },
+      {
+        id: 5,
+        name: 'Pintura Látex Sipa 1 Galón',
+        brand: 'Sipa',
+        price: 18990,
+        stock: 30,
+        category: 'pinturas',
+        image: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=400',
+        description: 'Pintura látex de alta cobertura y durabilidad.'
+      }
+    ];
+  }
+};
+
+// ==================== VENTAS SERVICE ====================
+const ventasService = {
+  async createOrder(orderData) {
+    try {
+      console.log('📝 Creando pedido:', orderData);
+      
+      // Verificar stock antes de crear pedido
+      for (const item of orderData.items || []) {
+        const stockCheck = await inventarioService.checkStock(item.id || item.productId, item.quantity);
+        if (!stockCheck.available) {
+          throw new Error(`Stock insuficiente para ${item.name}. Disponible: ${stockCheck.currentStock}`);
+        }
+      }
+
+      const response = await apiVentas.post('/pedidos', orderData);
+      
+      // Actualizar inventario (descontar stock)
+      for (const item of orderData.items || []) {
+        await inventarioService.updateStock(item.id || item.productId, -item.quantity);
+      }
+
+      console.log('✅ Pedido creado y stock actualizado:', response.data);
+      return { success: true, data: response.data };
+
+    } catch (error) {
+      console.error('❌ Error creando pedido:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message
+      };
+    }
+  },
+
+  async getAllOrders() {
+    try {
+      const response = await apiVentas.get('/pedidos');
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.warn('⚠️ No se pudieron cargar pedidos, usando datos mock');
+      return { 
+        success: true, 
+        data: this.getMockOrders()
+      };
+    }
+  },
+
+  async updateOrderStatus(orderId, status) {
+    try {
+      const response = await apiVentas.put(`/pedidos/${orderId}/estado`, { status });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message
+      };
+    }
+  },
+
+  getMockOrders() {
+    return [
+      {
+        id: 1,
+        total: 89990,
+        fecha: new Date().toISOString(),
+        estado: 'pendiente_pago',
+        cliente: { email: 'cliente@test.cl' },
+        items: [{ name: 'Taladro Bosch', quantity: 1, price: 89990 }]
+      },
+      {
+        id: 2,
+        total: 25980,
+        fecha: new Date(Date.now() - 86400000).toISOString(),
+        estado: 'pagado',
+        cliente: { email: 'cliente2@test.cl' },
+        items: [{ name: 'Martillo Stanley', quantity: 2, price: 12990 }]
+      }
+    ];
+  }
+};
+
+// ==================== BANCO SERVICE ====================
+const bancoService = {
+  async getExchangeRate() {
+    try {
+      console.log('💱 Obteniendo tipo de cambio USD...');
+      const response = await apiBanco.get('/dolar');
+      const rate = response.data.serie[0].valor;
+      
+      console.log(`✅ Tipo de cambio USD: $${rate}`);
+      return {
+        success: true,
+        data: {
+          currency: 'USD',
+          rate: rate,
+          date: response.data.serie[0].fecha
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error obteniendo tipo de cambio:', error);
+      return {
+        success: false,
+        data: { currency: 'USD', rate: 800 }
+      };
+    }
+  },
+
+  async convertCurrency(amount, fromCurrency = 'USD', toCurrency = 'CLP') {
+    try {
+      const exchangeData = await this.getExchangeRate();
+      if (!exchangeData.success) {
+        throw new Error('No se pudo obtener tipo de cambio');
+      }
+
+      let convertedAmount;
+      if (fromCurrency === 'USD' && toCurrency === 'CLP') {
+        convertedAmount = amount * exchangeData.data.rate;
+      } else if (fromCurrency === 'CLP' && toCurrency === 'USD') {
+        convertedAmount = amount / exchangeData.data.rate;
+      } else {
+        throw new Error('Conversión no soportada');
+      }
+
+      return {
+        success: true,
+        convertedAmount: Math.round(convertedAmount),
+        rate: exchangeData.data.rate
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+};
+
+// ==================== REPORTES SERVICE ====================
+const reportesService = {
+  async getVentasReporte(periodo = 'mes') {
+    try {
+      const orders = await ventasService.getAllOrders();
+      if (!orders.success) {
+        throw new Error('No se pudieron obtener las órdenes');
+      }
+
+      const now = new Date();
+      const filteredOrders = orders.data.filter(order => {
+        const orderDate = new Date(order.fecha);
+        if (periodo === 'mes') {
+          return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+        } else if (periodo === 'semana') {
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          return orderDate >= weekAgo;
+        }
+        return true;
+      });
+
+      const totalVentas = filteredOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+      const cantidadOrdenes = filteredOrders.length;
+      const promedioVenta = cantidadOrdenes > 0 ? totalVentas / cantidadOrdenes : 0;
+
+      return {
+        success: true,
+        data: {
+          periodo,
+          totalVentas,
+          cantidadOrdenes,
+          promedioVenta,
+          ordenes: filteredOrders,
+          generado: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  async getInventarioReporte() {
+    try {
+      const products = await inventarioService.getProducts();
+      if (!products.success) {
+        throw new Error('No se pudieron obtener los productos');
+      }
+
+      const stockBajo = products.data.filter(p => p.stock < 10);
+      const stockTotal = products.data.reduce((sum, p) => sum + p.stock, 0);
+      const valorInventario = products.data.reduce((sum, p) => sum + (p.price * p.stock), 0);
+
+      return {
+        success: true,
+        data: {
+          totalProductos: products.data.length,
+          stockTotal,
+          valorInventario,
+          productosStockBajo: stockBajo.length,
+          alertasStock: stockBajo,
+          generado: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+};
+
+// ==================== AUTH SERVICE ====================
+const authService = {
+  async login(credentials) {
+    try {
+      const users = [
+        { id: 1, email: 'admin@ferremas.cl', password: 'admin123', name: 'Administrador', type: 'admin' },
+        { id: 2, email: 'cliente@test.cl', password: 'cliente123', name: 'Cliente Test', type: 'client' }
+      ];
+
+      const user = users.find(u => u.email === credentials.email && u.password === credentials.password);
+      
+      if (user) {
+        const token = `mock-token-${user.id}-${Date.now()}`;
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+        
+        return {
+          success: true,
+          data: { user, token }
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Credenciales inválidas'
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+};
+
+// ==================== SERVICIO DE COMPRAS ====================
+const comprasService = {
+  async procesarCompra(carritoData, metodoPago = 'webpay') {
+    try {
+      console.log('🛒 Procesando compra completa...', carritoData);
+
+      if (!carritoData.items || carritoData.items.length === 0) {
+        throw new Error('Carrito vacío');
+      }
+
+      const subtotal = carritoData.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const total = subtotal + (carritoData.costoEnvio || 0);
+
+      const orderData = {
+        items: carritoData.items,
+        subtotal,
+        total,
+        cliente: carritoData.cliente,
+        entrega: carritoData.entrega,
+        metodoPago,
+        estado: 'pendiente_pago',
+        fecha: new Date().toISOString()
+      };
+
+      const orderResult = await ventasService.createOrder(orderData);
+      if (!orderResult.success) {
+        throw new Error(orderResult.error);
+      }
+
+      if (metodoPago === 'webpay') {
+        const transactionResult = await webpayService.createTransaction({
+          amount: total,
+          orderId: orderResult.data.id
+        });
+
+        if (!transactionResult.success) {
+          throw new Error('Error creando transacción de pago: ' + transactionResult.error);
+        }
+
+        return {
+          success: true,
+          type: 'redirect_payment',
+          paymentUrl: transactionResult.data.url,
+          token: transactionResult.data.token,
+          orderId: orderResult.data.id
+        };
+      }
+
+      return {
+        success: true,
+        type: 'order_created',
+        orderId: orderResult.data.id
+      };
+
+    } catch (error) {
+      console.error('❌ Error procesando compra:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+};
+
+// ==================== FORMAT UTILS ====================
+const formatUtils = {
+  formatPrice: (price) => {
+    return new Intl.NumberFormat('es-CL', {
+      style: 'currency',
+      currency: 'CLP'
+    }).format(price);
+  },
+
+  formatDate: (date) => {
+    return new Date(date).toLocaleDateString('es-CL');
+  },
+
+  generateOrderId: () => {
+    return `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  }
+};
+
+// ==================== EXPORTACIÓN ÚNICA (SIN DUPLICACIONES) ====================
+export {
+  webpayService,
+  inventarioService,
+  ventasService,
+  bancoService,
+  reportesService,
+  authService,
+  comprasService,
+  formatUtils
+};
+
+// Export por defecto
+export default {
+  webpayService,
+  inventarioService,
+  ventasService,
+  bancoService,
+  reportesService,
+  authService,
+  comprasService,
+  formatUtils
+};
