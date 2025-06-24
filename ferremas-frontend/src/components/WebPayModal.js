@@ -4,22 +4,30 @@ import { webpayService, formatUtils } from '../services/api';
 const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess, userInfo }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [step, setStep] = useState('confirm'); // confirm, processing, success, error
+  const [step, setStep] = useState('confirm'); // confirm, processing, redirect, error
   const [transactionData, setTransactionData] = useState(null);
 
-  // Cerrar modal al hacer click fuera
+  // Cerrar modal al hacer click fuera o Escape
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === 'Escape') onClose();
     };
 
+    const handleClickOutside = (e) => {
+      if (e.target.classList.contains('webpay-modal-backdrop')) {
+        onClose();
+      }
+    };
+
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
+      document.addEventListener('click', handleClickOutside);
       document.body.style.overflow = 'hidden';
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('click', handleClickOutside);
       document.body.style.overflow = 'unset';
     };
   }, [isOpen, onClose]);
@@ -30,6 +38,7 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
       setStep('confirm');
       setError('');
       setTransactionData(null);
+      setLoading(false);
     }
   }, [isOpen]);
 
@@ -39,12 +48,22 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
     setStep('processing');
 
     try {
+      // Validaciones previas
+      if (!userInfo || !cartItems || cartItems.length === 0 || totalAmount <= 0) {
+        throw new Error('Datos de pago incompletos');
+      }
+
+      // Guardar datos temporalmente para el retorno
+      localStorage.setItem('pendingCart', JSON.stringify(cartItems));
+      localStorage.setItem('pendingTotal', JSON.stringify(totalAmount));
+      localStorage.setItem('pendingUser', JSON.stringify(userInfo));
+
       // Preparar datos de la transacción
       const transactionPayload = {
         amount: totalAmount,
         buyOrder: formatUtils.generateOrderId(),
         sessionId: `SES_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-        returnUrl: `${window.location.origin}?pago=exitoso`
+        returnUrl: `${window.location.origin}?payment_return=true`
       };
 
       console.log('🔄 Iniciando pago con Webpay:', transactionPayload);
@@ -54,51 +73,69 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
 
       if (result.success && result.data) {
         setTransactionData(result.data);
-        
-        // Mostrar información antes de redirigir
         setStep('redirect');
         
-        // Crear formulario para redirigir a Webpay
+        // Mostrar información antes de redirigir
         setTimeout(() => {
           redirectToWebpay(result.data);
         }, 3000);
 
       } else {
-        throw new Error(result.error?.message || 'Error al crear la transacción');
+        throw new Error(result.error?.message || 'Error al crear la transacción con Webpay');
       }
 
     } catch (error) {
       console.error('❌ Error en el pago:', error);
       setError(error.message || 'Error al procesar el pago');
       setStep('error');
+      
+      // Limpiar datos temporales en caso de error
+      localStorage.removeItem('pendingCart');
+      localStorage.removeItem('pendingTotal');
+      localStorage.removeItem('pendingUser');
     } finally {
       setLoading(false);
     }
   };
 
   const redirectToWebpay = (data) => {
-    // Crear formulario para redirección automática
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = data.url;
-    form.style.display = 'none';
+    try {
+      // Crear formulario para redirección automática
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = data.url;
+      form.style.display = 'none';
 
-    const tokenInput = document.createElement('input');
-    tokenInput.type = 'hidden';
-    tokenInput.name = 'token_ws';
-    tokenInput.value = data.token;
+      const tokenInput = document.createElement('input');
+      tokenInput.type = 'hidden';
+      tokenInput.name = 'token_ws';
+      tokenInput.value = data.token;
 
-    form.appendChild(tokenInput);
-    document.body.appendChild(form);
+      form.appendChild(tokenInput);
+      document.body.appendChild(form);
 
-    // Redirigir a Webpay
-    form.submit();
+      console.log('🚀 Redirigiendo a Webpay:', data.url);
+
+      // Redirigir a Webpay
+      form.submit();
+    } catch (error) {
+      console.error('❌ Error en redirección:', error);
+      setError('Error al redirigir a Webpay');
+      setStep('error');
+    }
   };
 
   const handleRetry = () => {
     setStep('confirm');
     setError('');
     setTransactionData(null);
+    setLoading(false);
+  };
+
+  const handleManualRedirect = () => {
+    if (transactionData) {
+      redirectToWebpay(transactionData);
+    }
   };
 
   if (!isOpen) return null;
@@ -115,46 +152,33 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
                 Confirmar Pago con Webpay
               </h2>
               <p className="text-gray-600">
-                Serás redirigido al portal seguro de Transbank
+                Procesa tu pago de forma segura con Transbank
               </p>
             </div>
 
             {/* Resumen del pedido */}
             <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="font-semibold text-gray-900 mb-3">Resumen del Pedido</h3>
-              
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {cartItems.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center text-sm">
-                    <div className="flex-1">
-                      <span className="text-gray-900">{item.name}</span>
-                      <span className="text-gray-500 ml-2">x{item.quantity}</span>
-                    </div>
-                    <span className="font-medium">
-                      {formatUtils.formatPrice(item.price * item.quantity)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="border-t pt-3 mt-3">
-                <div className="flex justify-between items-center font-bold text-lg">
-                  <span>Total a Pagar:</span>
-                  <span className="text-blue-900">
-                    {formatUtils.formatPrice(totalAmount)}
-                  </span>
+              <h3 className="font-semibold text-gray-900 mb-3">📋 Resumen del Pedido</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Productos ({cartItems?.length || 0}):</span>
+                  <span>${(totalAmount || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between font-bold border-t pt-2">
+                  <span>Total a pagar:</span>
+                  <span className="text-blue-900">${(totalAmount || 0).toLocaleString()}</span>
                 </div>
               </div>
             </div>
 
-            {/* Información del cliente */}
+            {/* Información del usuario */}
             {userInfo && (
               <div className="bg-blue-50 rounded-lg p-4">
-                <h3 className="font-semibold text-blue-900 mb-2">Información del Cliente</h3>
-                <p className="text-blue-800">
-                  <strong>Nombre:</strong> {userInfo.name}
+                <h3 className="font-semibold text-blue-900 mb-2">👤 Datos del Cliente</h3>
+                <p className="text-blue-800 text-sm">
+                  <strong>Nombre:</strong> {userInfo.name || userInfo.email}
                 </p>
-                <p className="text-blue-800">
+                <p className="text-blue-800 text-sm">
                   <strong>Email:</strong> {userInfo.email}
                 </p>
               </div>
@@ -192,7 +216,7 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
               </button>
               <button
                 onClick={handlePayment}
-                disabled={loading}
+                disabled={loading || !userInfo || !cartItems || cartItems.length === 0}
                 className="flex-1 px-6 py-3 bg-blue-900 text-white rounded-lg hover:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Procesando...' : 'Pagar con Webpay'}
@@ -214,6 +238,9 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
             <div className="flex justify-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-900"></div>
             </div>
+            <p className="text-sm text-gray-500">
+              Por favor, no cierres esta ventana
+            </p>
           </div>
         );
 
@@ -230,10 +257,10 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
             
             {transactionData && (
               <div className="bg-green-50 rounded-lg p-4 text-left">
-                <h3 className="font-semibold text-green-900 mb-2">Datos de la Transacción</h3>
+                <h3 className="font-semibold text-green-900 mb-2">✅ Datos de la Transacción</h3>
                 <div className="text-green-800 text-sm space-y-1">
                   <p><strong>Orden:</strong> {transactionData.buy_order}</p>
-                  <p><strong>Monto:</strong> {formatUtils.formatPrice(transactionData.amount)}</p>
+                  <p><strong>Monto:</strong> ${(transactionData.amount || 0).toLocaleString()}</p>
                   <p><strong>Token:</strong> {transactionData.token?.substring(0, 20)}...</p>
                 </div>
               </div>
@@ -246,10 +273,10 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
             </div>
 
             <p className="text-sm text-gray-500">
-              Si no eres redirigido automáticamente, 
+              Si no eres redirigido automáticamente en 5 segundos,{' '}
               <button 
-                onClick={() => redirectToWebpay(transactionData)}
-                className="text-blue-600 hover:underline ml-1"
+                onClick={handleManualRedirect}
+                className="text-blue-600 hover:underline font-medium"
               >
                 haz clic aquí
               </button>
@@ -268,6 +295,16 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
               <p className="text-red-800">{error}</p>
             </div>
             
+            <div className="text-sm text-gray-600 space-y-2">
+              <p>Posibles soluciones:</p>
+              <ul className="list-disc list-inside text-left">
+                <li>Verifica tu conexión a internet</li>
+                <li>Asegúrate de tener fondos suficientes</li>
+                <li>Intenta con otra tarjeta</li>
+                <li>Contacta a nuestro soporte si persiste</li>
+              </ul>
+            </div>
+            
             <div className="flex space-x-4">
               <button
                 onClick={onClose}
@@ -279,7 +316,7 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
                 onClick={handleRetry}
                 className="flex-1 px-6 py-3 bg-blue-900 text-white rounded-lg hover:bg-blue-800 transition-colors"
               >
-                Reintentar
+                Reintentar Pago
               </button>
             </div>
           </div>
@@ -291,7 +328,7 @@ const WebPayModal = ({ isOpen, onClose, cartItems, totalAmount, onPaymentSuccess
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="webpay-modal-backdrop fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div 
         className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
